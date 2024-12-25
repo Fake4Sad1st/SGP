@@ -1,3 +1,5 @@
-all_kissat/input_cnf/*
-*.pdf
-*.cnf
+all_kissat/input_cnf/
+all_kissat/output_txt/
+archived/
+out/
+console.log
