@@ -1,4 +1,4 @@
-# sqrt-k-linear-2 with binomial-3
+# sqrt-k-linear-2 with variable-tmp-3
 # other parts updated: 26/12/24
 
 #------------------------------LIBRARIES---------------------------------
@@ -49,7 +49,7 @@ log_file = open(online_path + 'console.log', 'a')
 INF: int = 1_000_000_000
 def generate_all_clauses(arr: list[int]):
     global solve_method
-    solve_method = f"sqrt_linear_binomial_{arr[0]}{arr[1]}{arr[2]}"
+    solve_method = f"sqrt_linear_tmp_{arr[0]}{arr[1]}{arr[2]}"
     for i in arr:
         if i == 1: ensure_golfer_plays_exactly_once_per_week() #1
         elif i == 2: ensure_group_contains_exactly_p_players() #2
@@ -174,19 +174,29 @@ def ensure_group_contains_exactly_p_players():
             exactly_k(list, players_per_group)
 
 # Ensures that no players are repeated in the same group across different weeks and groups.
-# w_g_x_x_g_w (3)
+# (3)
 def ensure_no_repeated_players_in_groups():
-    for week in range(1, num_weeks + 1):
-        for group in range(1, num_groups + 1):
-            for golfer1 in range(1, num_players + 1):
-                for golfer2 in range(golfer1 + 1, num_players + 1):
-                    for other_group in range(1, num_groups + 1):
-                        for other_week in range(week + 1, num_weeks + 1):
-                            clause = [-get_variable(golfer1, group, week),
-                                      -get_variable(golfer2, group, week),
-                                      -get_variable(golfer1, other_group, other_week),
-                                      -get_variable(golfer2, other_group, other_week)]
-                            plus_clause(clause)
+    if num_weeks == 1: return
+    tmp = [0 for i in range(num_weeks + 1)] # Do player p1 and p2 meet in week w?
+
+    def at_most_one(p1, p2):
+        global id_variable
+        for i in range(1, num_weeks + 1):
+            tmp[i] = id_variable + 1
+            id_variable += 1
+        
+        for w in range(1, num_weeks + 1):
+            for g in range(1, num_groups + 1):
+                plus_clause([-get_variable(p1, g, w), -get_variable(p2, g, w), tmp[w]])
+                plus_clause([get_variable(p1, g, w), -get_variable(p2, g, w), -tmp[w]])
+                # (2')
+                plus_clause([-get_variable(p1, g, w), get_variable(p2, g, w), -tmp[w]])
+
+        for w1 in range(1, num_weeks + 1):
+            for w2 in range(w1 + 1, num_weeks + 1): plus_clause([-tmp[w1], -tmp[w2]])
+
+    for p1 in range(1, num_players + 1):
+        for p2 in range(p1 + 1, num_players + 1): at_most_one(p1, p2)
 
 #--------------------------SYMMETRY BREAKING-----------------------------
 def all_symmetry_breaking():

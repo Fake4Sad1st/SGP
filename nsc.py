@@ -1,11 +1,12 @@
 # nsc-2 with binomial-3
-# other parts updated: 15/12/24
+# other parts updated: 26/12/24
 
+#------------------------------LIBRARIES---------------------------------
 # https://pysathq.github.io/docs/html/api/solvers.html
 # Glucose (4.2.1)
 # Minisat (2.2 release)
 # CaDiCaL (1.9.5)
-from pysat.solvers import Solver, Glucose3, Minisat22, Cadical195
+from pysat.solvers import Solver, Glucose3, Minisat22
 from prettytable import PrettyTable
 from threading import Timer
 from openpyxl import load_workbook, Workbook
@@ -15,13 +16,16 @@ from datetime import datetime
 import pandas
 import os, sys
 
+#------------------------------CONSTANTS---------------------------------
 GLUCOSE_NAME = "Glucose3"
 MINISAT_NAME = "Minisat22"
 CADICAL_NAME = "Cadical195"
 KISSAT_NAME = "Kissat"
 
+# GLUCOSE_NAME, MINISAT_NAME, KISSAT_NAME, CADICAL_NAME
+ALL_SOLVER_NAME = [GLUCOSE_NAME, KISSAT_NAME, CADICAL_NAME]
+# [1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]
 ALL_SOLVE_METHOD = [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
-ALL_SOLVER_NAME = [GLUCOSE_NAME, MINISAT_NAME, KISSAT_NAME]
 
 num_weeks: int  # number of weeks
 players_per_group: int  # players per group
@@ -41,6 +45,7 @@ enable_kissat: bool
 online_path = ''
 log_file = open(online_path + 'console.log', 'a')
 
+#--------------------------MAIN CONSTRAINTS-----------------------------
 def generate_all_clauses(arr: list[int]):
     global solve_method
     solve_method = f"nsc_binomial_{arr[0]}{arr[1]}{arr[2]}"
@@ -153,6 +158,7 @@ def ensure_no_repeated_players_in_groups():
                                       -get_variable(golfer2, other_group, other_week)]
                             plus_clause(clause)
 
+#--------------------------SYMMETRY BREAKING-----------------------------
 def all_symmetry_breaking():
     def is_prime(x: int) -> bool:
         if x < 2: return False
@@ -304,7 +310,7 @@ def all_symmetry_breaking():
                 symmetry_breaking_15()
                 symmetry_breaking_16()
 
-# returns a unique identifier for the variable that represents the assignment of the player to the group in the week
+#-----------------------------OTHER PARTS--------------------------------
 def get_variable(player, group, week):
     player -= 1
     group -= 1
@@ -321,36 +327,27 @@ def resolve_variable(v):
     assert get_variable(player, group, week) == abs(v)
     return player, group, week
 
-def write_to_xlsx(result_dict):
+def write_to_csv(result_dict):
     # Append the result to a list
-    excel_results = []
-    excel_results.append(result_dict)
+    csv_results = []
+    csv_results.append(result_dict)
 
-    output_path = online_path + 'out'
+    output_path = online_path + 'reports'
 
-    # Write the results to an Excel file
+    # Write the results to a CSV file
     if not os.path.exists(output_path): os.makedirs(output_path)
 
-    df = pandas.DataFrame(excel_results)
+    df = pandas.DataFrame(csv_results)
     current_date = datetime.now().strftime('%Y-%m-%d')
-    excel_file_path = f"{output_path}/results_{current_date}.xlsx"
+    csv_file_path = f"{output_path}/results_{current_date}.csv"
 
     # Check if the file already exists
-    if os.path.exists(excel_file_path):
-        try: book = load_workbook(excel_file_path)
-        except BadZipFile: book = Workbook()  # Create a new workbook if the file is not a valid Excel file
+    if os.path.exists(csv_file_path):
+        df.to_csv(csv_file_path, mode='a', index=False, header=False)
+    else:
+        df.to_csv(csv_file_path, index=False, header=True)
 
-        # Check if the 'Results' sheet exists
-        if 'Results' not in book.sheetnames:
-            book.create_sheet('Results')  # Create 'Results' sheet if it doesn't exist
-
-        sheet = book['Results']
-        for row in dataframe_to_rows(df, index=False, header=False): sheet.append(row)
-        book.save(excel_file_path)
-
-    else: df.to_excel(excel_file_path, index=False, sheet_name='Results', header=False)
-
-    print_to_console_and_log(f"Result added to Excel file: {os.path.abspath(excel_file_path)}\n")
+    print_to_console_and_log(f"Result added to CSV file: {os.path.abspath(csv_file_path)}\n")
 
 def check_legit(solution):
     def process_results(results):
@@ -388,7 +385,7 @@ def check_legit(solution):
 
     def show_results2(results):
         print_table = PrettyTable()
-        field_names = ["W\P"]
+        field_names = ["W'\P"]
         for player in range(1, num_players + 1):
             field_names.append(str(player))
         print_table.field_names = field_names
@@ -502,7 +499,7 @@ def run_pythonsat(result_dict):
 
     timer.cancel()
     sat_solver.delete()
-    write_to_xlsx(result_dict)
+    write_to_csv(result_dict)
 
 def run_kissat(problem_name, result_dict):
     # Store the number of variables and clauses before solving the problem
@@ -573,7 +570,67 @@ def run_kissat(problem_name, result_dict):
     os.system(bashCommand)
 
     handleFile()
-    write_to_xlsx(result_dict)
+    write_to_csv(result_dict)
+    
+def run_cadical(problem_name, result_dict):
+    # Store the number of variables and clauses before solving the problem
+    num_vars = id_variable
+    num_clauses = len(all_clauses)
+
+    result_dict["Variables"] = num_vars
+    result_dict["Clauses"] = num_clauses
+    print_to_console_and_log("Variables: " + str(num_vars))
+    print_to_console_and_log("Clauses: " + str(num_clauses))
+
+    def write_to_input():
+        # Write data to the file
+        with open(input_file, 'w') as writer:
+            # Write each clause to the file
+            for clause in all_clauses:
+                for literal in clause: writer.write(str(literal) + " ")
+                writer.write("\n")
+        
+        all_clauses.clear()
+        print_to_console_and_log(f"Input written to {input_file}.\n")
+
+    def handleFile():
+        result_text = "timeout"
+        time_run = time_budget
+        solution = []
+
+        result = []
+        with open(output_file, 'r') as file: lines = file.readlines()
+        if lines[0] != "-1\n":
+            time_run = float(lines[1])
+            print_to_console_and_log(f"Time run: {time_run}s.")
+            if lines[0] == "0\n": result_text = "unsat"
+            else:
+                result_text = "sat"
+                solution = list(map(int, lines[2].split()))
+
+        result_dict["Result"] = result_text
+        result_dict["Time"] = time_run
+
+        if result_text == "timeout": print_to_console_and_log(f"Time limit exceeded ({time_budget}s).\n")
+        elif result_text == "sat":
+            print_to_console_and_log(f"A solution was found in {time_run}s.")
+            if not check_legit(solution): sys.exit(1)
+        else: print_to_console_and_log(f"UNSAT. Time run: {time_run}s.\n")
+    
+    # Create the directory if it doesn't exist
+    path = online_path + "all_cadical"
+    
+    input_file = os.path.join(path, "input.txt")
+    output_file = os.path.join(path, "output.txt")
+
+    write_to_input()
+
+    print_to_console_and_log("Searching for a solution...")
+    bashCommand = f"./all_cadical/runlim -r {time_budget + 10} -o all_cadical/report.txt python3 all_cadical/cadical.py"
+    os.system(bashCommand)
+
+    handleFile()
+    write_to_csv(result_dict)
 
 def solve_sat_problem():
     problem_name = f"{num_groups}-{players_per_group}-{num_weeks}"
@@ -585,7 +642,7 @@ def solve_sat_problem():
     global solve_method, solver_name
     global enable_pythonsat, enable_kissat
     for solver_name in ALL_SOLVER_NAME:
-        if solver_name == "Kissat":
+        if solver_name == KISSAT_NAME or solver_name == CADICAL_NAME:
             enable_kissat = True
             enable_pythonsat = False
         else:
@@ -620,7 +677,8 @@ def solve_sat_problem():
 
             print_to_console_and_log(f"{solve_method} with {solver_name}:")
             if enable_pythonsat: run_pythonsat(result_dict)
-            if enable_kissat: run_kissat(problem_name, result_dict)
+            elif solver_name == KISSAT_NAME: run_kissat(problem_name, result_dict)
+            elif solver_name == CADICAL_NAME: run_cadical(problem_name, result_dict)
 
             print_to_console_and_log('-' * 120)
 

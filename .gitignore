@@ -1,5 +1,6 @@
 all_kissat/input_cnf/
 all_kissat/output_txt/
 archived/
-out/
+reports/
 console.log
+all_cadical/*.txt
